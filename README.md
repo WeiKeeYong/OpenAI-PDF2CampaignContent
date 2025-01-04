@@ -7,6 +7,7 @@ This repository demonstrates a proof-of-concept (POC) workflow for creating camp
 1. **Upload a PDF file**: Select a PDF file from your local machine.
 2. **Send it to an OpenAI Assistant**: The pre-created assistant processes the file.
 3. **Generate Content**: OpenAI returns an email body content in basic HTML, creatively designed for campaign purposes.
+4. **Clean upt**: Delete the uploaded file.
 
 ## Prerequisites
 
