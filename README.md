@@ -16,9 +16,10 @@ This repository demonstrates a proof-of-concept (POC) workflow for creating camp
 
 ## Code Example
 
-The script is written in Python and utilizes the OpenAI Python client. Key functionalities include:
+The Code  is written in Python and utilizes the OpenAI Python client. Key functionalities include:
 
 - Reading API keys from a file.
 - Uploading a PDF file and linking it to a vector store.
 - Polling for processing status.
 - Interacting with the OpenAI assistant to generate email body content in the specified language.
+- Another file is using Open AI Assistant & Function Calling
