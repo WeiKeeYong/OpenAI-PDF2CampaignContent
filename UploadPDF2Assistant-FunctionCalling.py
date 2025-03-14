@@ -1,51 +1,21 @@
-import sys
-import time
+## Change it to use opeanai responses api. Please upgrade your openai library to minimal 1.66.3
+
+import time, sys
 from openai import OpenAI
 import json
-from IPython.display import display
+from IPython.display import display, HTML
+from bs4 import BeautifulSoup
+from tkhtmlview import HTMLLabel
+import tkinter as tk
 
-#Set Constants and control
-timeout_seconds = 60  # stop force exit
+# Set Constants and control some for future use
+timeout_seconds = 90  # stop force exit
 wait_time = 3
 pause_time = 1
-content_length = 1000
+content_length = 15000
 enable_logging = False
 
-
-def show_json(obj):
-    display(json.loads(obj.model_dump_json()))
-
-def read_api_key_from_file(file_path, start_with):
-    #This function read the file, and extract the key that starts with the start_with string
-    try:
-        with open(file_path, 'r') as file:
-            for line in file:
-                if line.startswith(start_with):
-                    api_key = line.strip().split(':')[1].strip()
-                    return api_key
-        raise ValueError(f"Key not found starting with '{start_with}' in file '{file_path}'") 
-
-    except FileNotFoundError:
-        print(f"Error: File '{file_path}' not found.")
-        sys.exit(1)
-    except ValueError as e:
-        print(str(e))
-        sys.exit(1)
-
-def cleanup_files(client, vector_store_file, uploaded_file):
-    deleted_vector_store_file= client.beta.vector_stores.files.delete(
-    file_id=vector_store_file.id,
-    vector_store_id=vector_store_id
-    )
-    if deleted_vector_store_file.deleted : 
-        client.files.delete(uploaded_file.id)
-        if enable_logging: print(f"File Delete Success")
-    else:
-        if enable_logging: print(f"File Delete Failed")
-    thread_deleted = client.beta.threads.delete(thread.id)
-    if enable_logging: print(f"Thread Deleted: {thread_deleted}")
-
-language = 99  
+language = 1
 match language:
     case 1:
         language = "Malay"
@@ -66,127 +36,156 @@ match language:
     case 9:
         language = "Khmer"
     case _:
-        language= "English"
+        language = "English"
 
 
-# Read the OpenAI API key from a file
-api_key = read_api_key_from_file('keys.txt', 'OPENAPI-ALL-Access:') #The file should contain the key in the format OPENAPI-ALL-Access:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-client = OpenAI(default_headers={"OpenAI-Beta": "assistants=v2"}, api_key=api_key)
+def show_json(obj):
+    display(json.loads(obj.model_dump_json()))
 
-# Define the vector store ID and file path
-vector_store_id = "vs_uUtjmSe2KEMFxiMB6duWnCgj"
-assistant_id = "asst_O4GIPNMRn9uy31UFRcIp7WDv"
-file_path = r"d:\\temp\\pdf1.pdf"  #the PDF File you want to upload and analyze
 
-# Upload the file and link it to the vector store
+def read_api_key_from_file(file_path, start_with):
+    # This function read the file, and extract the key that starts with the start_with string
+    try:
+        with open(file_path, 'r') as file:
+            for line in file:
+                if line.startswith(start_with):
+                    api_key = line.strip().split(':')[1].strip()
+                    return api_key
+        raise ValueError(f"Key not found starting with '{start_with}' in file '{file_path}'")
+
+    except FileNotFoundError:
+        print(f"Error: File '{file_path}' not found.")
+        sys.exit(1)
+    except ValueError as e:
+        print(str(e))
+        sys.exit(1)
+
+
+def uploadfile(client, file):
+    uploaded_file = client.files.create(file=file, purpose='user_data')
+    return uploaded_file
+
+
+def removefile(client, file_id):
+    removefile = client.files.delete(file_id)
+    return removefile
+
+
+def render_html_with_tkinter(html_string):
+    """
+    Render HTML content in a tkinter window using tkhtmlview.
+    """
+    root = tk.Tk()
+    root.title("Marketing Summary")
+    root.geometry("1024x768")  # Set window size
+
+    html_label = HTMLLabel(root, html=html_string)
+    html_label.pack(fill=tk.BOTH, expand=True)  # Fill the window
+
+    root.mainloop()
+
+tools = [{
+    "type": "function",
+    "name": "generate_email_body",
+    "description": "Return email body with basic HTML structure",
+    "parameters":{
+    "type": "object",
+    "required": [
+      "body"
+    ],
+    "properties": {
+      "body": {
+        "type": "string",
+        "description": "Body content of the email in HTML format"
+      }
+    },
+    "additionalProperties": False
+  }
+}]
+
+
+file_path = r"d:\\temp\\pdf4.pdf"
+api_key = read_api_key_from_file(r"d:\codes\keys\keys.txt", 'OPENAPI-ALL-Access:')  #The file should contain the key in the format OPENAPI-ALL-Access:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+client = OpenAI(api_key=api_key)
 try:
     # Step 1: Upload the file
     with open(file_path, "rb") as file:
-        uploaded_file = client.files.create(file=file, purpose="assistants")
-    
-    if enable_logging: print(f"File uploaded successfully! File ID: {uploaded_file.id}")
-# Step 2: Add one file to the vector store
-    vector_store_file = client.beta.vector_stores.files.create(
-        vector_store_id=vector_store_id,
-        file_id=uploaded_file.id
-    )
+        uploaded_file = uploadfile(client, file)
+        if enable_logging:
+            print(f"File Upload Success")
+            print(uploaded_file)
 
-    if enable_logging: print("File being added to vector store...")
-    # Set timeout duration and start time
-    start_time = time.time()
+        file_id = uploaded_file.id
+        if enable_logging:
+            print(f"File ID: {file_id}")
 
-    # Polling until the file status is 'completed'
-    while True:
-        # Check if the operation has timed out
-        if time.time() - start_time > timeout_seconds:
-            print(f"Operation timed out after {timeout_seconds} seconds")
-            sys.exit(1)  # Exit entire program with error code 1
+        if file_id is not None:
 
-        # Fetch the current status of the file
-        try:
-            updated_file = client.beta.vector_stores.files.retrieve(
-                file_id=vector_store_file.id,
-                vector_store_id=vector_store_id
+            response = client.responses.create(
+                model="gpt-4o",
+                input=[
+                    {
+                        "role": "system",
+                        "content": """
+                                You are an Marketing Expert, you will digest the file given and help generate content according to request.  
+                                You  will not include any placeholder.
+                                You will Return in basic HTML structure
+                                """
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_file",
+                                "file_id": file_id,
+                            },
+                            {
+                                "type": "input_text",
+                                "text": f"Please analyze this PDF content, it's marketing material.  Generate a concise summary in html format using the generate_email_body function. Language: {language}, length of message around {content_length} characters.",
+                            },
+                        ]
+                    }
+                ], tools=tools
+                
             )
-            if enable_logging: print(f"Current File Status: {updated_file.status}")
+            if enable_logging:
+                print("Raw Response:")
+                show_json(response)  
+                # print("\nOutput:") #When function_call is needed, we need to use response.output, not response.output_text
+                # print(response.output)
+                # print("\n")
+                # print("\nOutput DIR:")
+                # print(dir(response.output))
+                # print("\n")
+                # print("\nOutput Type:")
+                # print(type(response.output))
+                # print("\n")
 
-            # Check if the status indicates completion or error
-            if updated_file.status == "completed":
-                if enable_logging: print("File processing completed successfully!")
-                time.sleep(pause_time) #wait 1 second before breaking the loop
-                break
-            elif updated_file.status == "failed":
-                print(f"Error occurred: {updated_file.last_error}")
-                sys.exit(2)  # Exit code 2 for API failure
-            
-            # Sleep for some time before polling again
-            time.sleep(wait_time)  # Adjust the sleep time as necessary
+            # Extract HTML from the function call arguments
+            if response.output and len(response.output) > 0:
+                function_call = response.output[0]
+                if function_call.type == "function_call" and function_call.name == "generate_email_body":
+                    arguments = json.loads(function_call.arguments)
+                    html_output = arguments.get("body")
 
-        except Exception as e:
-            print(f"API call failed: {str(e)}")
-            break
+                    if html_output:
+                        render_html_with_tkinter(html_output)
+                    else:
+                         print("No 'body' key found in function call arguments.")
+                else:
+                      print("No function_call found or wrong function name in the output")
 
-    # Create a thread
-    thread = client.beta.threads.create()
-    
-    # Add a message to the thread
-    message = client.beta.threads.messages.create(
-        thread_id=thread.id,
-        role="user",
-        content=f"Please analyze this PDF content and generate an email body using the generate_email_body function. Language: {language}, length of message around {content_length} characters.",
-    )
-    
-    # Run the assistant
-    run = client.beta.threads.runs.create(
-        thread_id=thread.id,
-        assistant_id="asst_O4GIPNMRn9uy31UFRcIp7WDv"
-    )
-    if enable_logging: show_json(run)
-    # Set timeout duration and start time
-    start_time = time.time()
+            else:
+                print("No output received or output is empty from model.")
 
-    # Wait for completion
-    while True:
-        if time.time() - start_time > timeout_seconds:
-            print(f"Operation timed out after {timeout_seconds} seconds")
-            sys.exit(1)  # Exit entire program with error code 1
-
-        run_status = client.beta.threads.runs.retrieve(
-            thread_id=thread.id,
-            run_id=run.id
-        )
-        if enable_logging: 
-            print("---Run Status---")
-            print( run_status.status )
-            print("----------------")
-
-        if run_status.status == 'requires_action':
-            # Handle function calls
-            if enable_logging: 
-                print("Function Calls Data:")
-                print(run_status.required_action.submit_tool_outputs.tool_calls)
-
-            html_body = ""
-            for tool in run_status.required_action.submit_tool_outputs.tool_calls:
-                if tool.function.name == "generate_email_body": html_body = json.loads(tool.function.arguments)["body"]
-            print(f"\nFunction Argument:\n{html_body}")
-            cleanup_files(client, vector_store_file, uploaded_file)
-            break
-        elif run_status.status == 'completed':
-            # Get messages id openai didn't return the function calling
-            messages = client.beta.threads.messages.list(thread_id=thread.id)
-            if enable_logging: 
-                print("------------------Raw AI Message---------------")
-                show_json(messages)
-                print("-----------------------------------------------\n")
-            print("Assistant Response:\n")
-            print(messages.data[0].content[0].text.value)
-            cleanup_files(client, vector_store_file, uploaded_file)
-            break
-        elif run_status.status == 'failed':
-            print(f"Run failed with error: {run_status.last_error}")
-            break
-        time.sleep(wait_time)
-
+            removefile(client, file_id)
+            if enable_logging:
+                print(f"File Delete Success")
+        else:
+            if enable_logging:
+                print(f"File Not found, Delete Failed")
 except Exception as e:
-    print(f"An error occurred: {e}")
+    print(f"Error: {str(e)}")
+    sys.exit(1)
+
